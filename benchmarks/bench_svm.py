@@ -3,17 +3,8 @@
 import numpy as np
 from datetime import datetime
 
-#
-#       .. Load dataset ..
-#
-from misc import load_data, bench
-print 'Loading data ...'
-X, y, T = load_data()
-print 'Done, %s samples with %s features loaded into ' \
-      'memory' % X.shape
 
-
-def bench_shogun():
+def bench_shogun(X, y, T, valid):
 #
 #       .. Shogun ..
 #
@@ -24,14 +15,15 @@ def bench_shogun():
     feat = RealFeatures(X.T)
     feat_test = RealFeatures(T.T)
     labels = Labels(y.astype(np.float64))
-    kernel = GaussianKernel(feat, feat, 1.)
+    kernel = GaussianKernel(feat, feat, 1. / X.shape[0])
     shogun_svm = LibSVM(1., kernel, labels)
     shogun_svm.train()
-    shogun_svm.classify(feat_test).get_labels()
-    return datetime.now() - start
+    dec_func = shogun_svm.classify(feat_test).get_labels()
+    score = np.mean(np.sign(dec_func) == valid)
+    return score, datetime.now() - start
 
 
-def bench_mlpy():
+def bench_mlpy(X, y, T, valid):
 #
 #       .. MLPy ..
 #
@@ -39,11 +31,11 @@ def bench_mlpy():
     start = datetime.now()
     mlpy_clf = mlpy_svm(kernel_type='rbf', C=1.)
     mlpy_clf.learn(X, y.astype(np.float64))
-    mlpy_clf.pred(T)
-    return datetime.now() - start
+    score = np.mean(mlpy_clf.pred(T) == valid)
+    return score, datetime.now() - start
 
 
-def bench_skl():
+def bench_skl(X, y, T, valid):
 #
 #       .. scikits.learn ..
 #
@@ -51,11 +43,11 @@ def bench_skl():
     start = datetime.now()
     clf = skl_svm.SVC(kernel='rbf', C=1.)
     clf.fit(X, y)
-    clf.predict(X)
-    return datetime.now() - start
+    score = np.mean(clf.predict(T) == valid)
+    return score, datetime.now() - start
 
 
-def bench_pymvpa():
+def bench_pymvpa(X, y, T, valid):
 #
 #       .. PyMVPA ..
 #
@@ -65,11 +57,11 @@ def bench_pymvpa():
     data = dataset_wizard(X, y)
     clf = mvpa_svm.RbfCSVMC(C=1.)
     clf.train(data)
-    clf.predict(X)
-    return datetime.now() - tstart
+    score = np.mean(clf.predict(T) == valid)
+    return score, datetime.now() - tstart
 
 
-def bench_pybrain():
+def bench_pybrain(X, y, T, valid):
 #
 #       .. PyBrain ..
 #
@@ -84,13 +76,15 @@ def bench_pybrain():
         ds.addSample(X[i], y[i])
     clf = SVMTrainer(SVMUnit(), ds)
     clf.train()
+    pred = np.empty(T.shape[0], dtype=np.int32)
     for i in range(T.shape[0]):
-        clf.svm.model.predict(T[i])
-    return datetime.now() - tstart
+        pred[i] = clf.svm.model.predict(T[i])
+    score = np.mean(pred == valid)
+    return score, datetime.now() - tstart
 
 
 
-def bench_mdp():
+def bench_mdp(X, y, T, valid):
 #
 #       .. MDP ..
 #
@@ -98,53 +92,75 @@ def bench_mdp():
     start = datetime.now()
     clf = mdp_svm(kernel='RBF')
     clf.train(X, y)
-    clf.label(T)
-    return datetime.now() - start
+    score = np.mean(clf.label(T) == valid)
+    return score, datetime.now() - start
 
 
-def bench_milk():
+def bench_milk(X, y, T, valid):
 #
 #       .. milk ..
 #
     from milk.supervised import svm
     start = datetime.now()
-    learner = svm.svm_raw(kernel=svm.rbf_kernel(sigma=1.), C=1.)
+    learner = svm.svm_raw(
+        kernel=svm.rbf_kernel(sigma=1./X.shape[1]), C=1.)
     model = learner.train(X,y)
-    predictions = map(model.apply, T)
-    return datetime.now() - start
+    pred = np.sign(map(model.apply, T))
+    score = np.mean(pred == valid)
+    return score, datetime.now() - start
 
 
 if __name__ == '__main__':
+    import sys, misc
+
     # don't bother me with warnings
     import warnings; warnings.simplefilter('ignore')
     np.seterr(all='ignore')
 
     print __doc__ + '\n'
+    if not len(sys.argv) == 2:
+        print misc.USAGE % __file__
+        sys.exit(-1)
+    else:
+        dataset = sys.argv[1]
 
-    res_shogun = bench(bench_shogun)
-    print 'Shogun: mean %s, std %s' % (
+    print 'Loading data ...'
+    data = misc.load_data(dataset)
+
+    print 'Done, %s samples with %s features loaded into ' \
+      'memory' % data[0].shape
+
+    score, res_shogun = misc.bench(bench_shogun, data)
+    print 'Shogun: mean %.2f, std %.2f' % (
         np.mean(res_shogun), np.std(res_shogun))
+    print 'Score: %2f\n' % score
 
-    res_mdp = bench(bench_mdp)
-    print 'MDP: mean %s, std %s' % (
+    score, res_mdp = misc.bench(bench_mdp, data)
+    print 'MDP: mean %.2f, std %.2f' % (
         np.mean(res_mdp), np.std(res_mdp))
+    print 'Score: %2f\n' % score
 
-    res_skl = bench(bench_skl)
-    print 'scikits.learn: mean %s, std %s' % (
+    score, res_skl = misc.bench(bench_skl, data)
+    print 'scikits.learn: mean %.2f, std %.2f' % (
         np.mean(res_skl), np.std(res_skl))
+    print 'Score: %2f\n' % score
 
-    res_mlpy = bench(bench_mlpy)
-    print 'MLPy: mean %s, std %s' % (
+    score, res_mlpy = misc.bench(bench_mlpy, data)
+    print 'MLPy: mean %.2f, std %.2f' % (
         np.mean(res_mlpy), np.std(res_mlpy))
+    print 'Score: %2f\n' % score
 
-    res_pymvpa = bench(bench_pymvpa)
-    print 'PyMVPA: mean %s, std %s' % (
+    score, res_pymvpa = misc.bench(bench_pymvpa, data)
+    print 'PyMVPA: mean %.2f, std %.2f' % (
         np.mean(res_pymvpa), np.std(res_pymvpa))
+    print 'Score: %2f\n' % score
 
-    res_pybrain = bench(bench_pybrain)
-    print 'Pybrain: mean %s, std %s' % (
+    score, res_pybrain = misc.bench(bench_pybrain, data)
+    print 'Pybrain: mean %.2f, std %.2f' % (
         np.mean(res_pybrain), np.std(res_pybrain))
+    print 'Score: %2f\n' % score
 
-    res_milk = bench(bench_milk)
-    print 'milk: mean %s, std %s' % (
+    score, res_milk = misc.bench(bench_milk, data)
+    print 'milk: mean %.2f, std %.2f' % (
         np.mean(res_milk), np.std(res_milk))
+    print 'Score: %2f\n' % score
