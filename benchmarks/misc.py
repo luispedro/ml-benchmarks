@@ -3,20 +3,23 @@ import numpy as np
 import os
 
 def load_data(dataset):
+    basedir = os.path.join(
+        os.path.dirname(__file__),
+        'data')
 
-    f = open(os.path.dirname(__file__) + '/data/%s_train.data' % dataset)
+    f = open(os.path.join(basedir, '%s_train.data' % dataset))
     X = np.fromfile(f, dtype=np.float64, sep=' ')
     f.close()
 
-    f = open(os.path.dirname(__file__) + '/data/%s_train.labels' % dataset)
+    f = open(os.path.join(basedir, '%s_train.labels' % dataset))
     y = np.fromfile(f, dtype=np.int32, sep=' ')
     f.close()
 
-    f = open(os.path.dirname(__file__) + '/data/%s_valid.data' % dataset)
+    f = open(os.path.join(basedir, '%s_valid.data' % dataset))
     T = np.fromfile(f, dtype=np.float64, sep=' ')
     f.close()
 
-    f = open(os.path.dirname(__file__) + '/data/%s_valid.labels' % dataset)
+    f = open(os.path.join(basedir, '%s_valid.labels' % dataset))
     valid = np.fromfile(f, dtype=np.float64, sep=' ')
     f.close()
 
